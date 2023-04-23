@@ -1,6 +1,9 @@
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudio,python,images
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudio,python,images
 
+### Annotatios Datasets ###
+*.txt
+
 ### Images ###
 # JPEG
 *.jpg
