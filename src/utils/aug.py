@@ -11,25 +11,27 @@ WIDTH = 160
 HEIGHT = 50
 X_INTERVAL = WIDTH // 3
 Y_INTERVAL = HEIGHT // 10
-IMAGE_DIR = '.\\data\\images'
-ANNO_DIR = '.\\data\\annotations'
+IMAGE_DIR = 'D:\\numeric-captcha-solver-datasets\\images'
+ANNO_DIR = 'D:\\numeric-captcha-solver-datasets\\annotations'
 filename = 0
+
 
 def get_lastest_filename(dir: str):
     previous_files = glob.glob(f"{dir}/*")
     if previous_files:
-        numeric_sorted = sorted(previous_files, reverse=True, key=lambda file_name: int(re.compile(r"\d+").search(file_name).group(0)))[0]
+        numeric_sorted = sorted(previous_files, reverse=True, key=lambda file_name: int(
+            re.compile(r"\d+").search(file_name).group(0)))[0]
         return int(os.path.splitext(os.path.basename(numeric_sorted))[0])
     return 0
 
 
 def to_yolo_format(no: str, bbox: tuple):
     """ Convert (left, top, right, bottom) into (cls_no, center_x, center_y, w, h) """
-    center_x = (bbox[0] + bbox[2]) / 2
-    center_y = (bbox[1] + bbox[3]) / 2
-    width = bbox[2] - bbox[0]
-    height = bbox[3] - bbox[1]
-    return no, center_x, center_y, width, height
+    center_x = (bbox[0] + bbox[2]) / 2 / WIDTH
+    center_y = (bbox[1] + bbox[3]) / 2 / HEIGHT
+    width = (bbox[2] - bbox[0]) / WIDTH
+    height = (bbox[3] - bbox[1]) / HEIGHT
+    return [no, center_x, center_y, width, height]
 
 
 def save_dataset(image: np.ndarray, annotations: tuple):
@@ -50,16 +52,17 @@ def save_dataset(image: np.ndarray, annotations: tuple):
                 for tu in annotations]))
 
 
+CYCLE = 6
+FONT_PATH = ".\\font\\Lucida Console ANSI Regular\\Lucida Console ANSI Regular.ttf"
+TEXT_SIZE = 53
+TEXT_ITEM_WIDTH = 32
+TEXT_ITEM_HEIGHT = 28
+PAD_MEAN = 10
+
+
 def put_numbers(image: np.ndarray):
+    random_sizes = np.random.normal(loc=TEXT_SIZE, scale=2, size=CYCLE)
 
-    CYCLE = 6
-    FONT_PATH = ".\\font\\Lucida Console ANSI Regular\\Lucida Console ANSI Regular.ttf"
-    TEXT_SIZE = 53
-    TEXT_ITEM_WIDTH = 32
-    TEXT_ITEM_HEIGHT = 28
-    PAD_MEAN = 10
-
-    font = ImageFont.truetype(FONT_PATH, size=TEXT_SIZE)
     x_scales = np.random.normal(loc=PAD_MEAN, scale=1.75, size=CYCLE)
     y_scales = np.random.normal(loc=PAD_MEAN, scale=0.75, size=CYCLE)
 
@@ -67,14 +70,14 @@ def put_numbers(image: np.ndarray):
 
     annotations = []
 
-    for x_scale, y_scale in zip(x_scales, y_scales):
-
+    for x_scale, y_scale, random_size in zip(x_scales, y_scales, random_sizes):
+        font = ImageFont.truetype(FONT_PATH, size=int(random_size))
         r = str(np.random.randint(9) + 1)
         y = (HEIGHT - TEXT_ITEM_HEIGHT) // 2 - y_scale
 
         img_pil = Image.fromarray(image)
         draw = ImageDraw.Draw(img_pil)
-        bbox = draw.textbbox((x, y), r)
+        bbox = draw.textbbox((x, y), r, font=font)
         annotations.append(to_yolo_format(r, bbox=bbox))
 
         draw.text((x, y), r, font=font, fill=(255))
@@ -111,7 +114,6 @@ def draw_randomline(image: np.ndarray):
 
 
 def create_dataset():
-    # create black canvas of size 500x500
     img = np.zeros((HEIGHT, WIDTH), dtype=np.uint8)
     img = draw_randomline(img)
     img = draw_randomline(img)
@@ -121,9 +123,8 @@ def create_dataset():
 
     img = cv2.GaussianBlur(img, (0, 0),  0.55)
 
-    # 구조화 요소 커널, 사각형 (3x3) 생성 ---①
     k = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-    # 팽창 연산 적용 ---②
+
     img = cv2.dilate(img, k)
 
     img = ~img
@@ -131,8 +132,23 @@ def create_dataset():
     return img, annotations
 
 
-def show_dataset(image: np.ndarray):
+def show_dataset(image_filename, anno_filename):
     # display the image and wait for a key event
+
+    with open(anno_filename, 'r') as f:
+        bboxes = [list(map(float, y.split(' ')))
+                  for y in (x[2:] for x in f.read().split('\n'))]
+
+    image = cv2.imread(image_filename, cv2.IMREAD_COLOR)
+
+    if bboxes:
+        for bbox in bboxes:
+            left = int((bbox[0] - bbox[2]/2) * image.shape[1])
+            top = int((bbox[1] - bbox[3]/2) * image.shape[0])
+            right = int((bbox[0] + bbox[2]/2) * image.shape[1])
+            bottom = int((bbox[1] + bbox[3]/2) * image.shape[0])
+            cv2.rectangle(image, (left, top), (right, bottom), (0, 0, 255), 1)
+
     cv2.imshow("Result", image)
     cv2.waitKey(0)
 
@@ -142,8 +158,8 @@ def show_dataset(image: np.ndarray):
 
 if __name__ == '__main__':
     filename = get_lastest_filename(IMAGE_DIR)
-    print(filename)
-    for n in range(10):
+    for n in range(60000):
         img, annotations = create_dataset()
         save_dataset(image=img, annotations=annotations)
-        # show_dataset(img)
+        # show_dataset('.\\data\\images\\11.png', '.\\data\\annotations\\11.txt')
+    print('done')
